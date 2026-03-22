@@ -11,6 +11,7 @@
   --text: #e8e8f0; --text-sub: #8888aa;
   --accent: #6c5ce7; --accent-hover: #7c6cf7; --accent-light: rgba(108,92,231,0.15);
   --green: #00b894; --red: #e17055; --yellow: #fdcb6e; --border: #2a2a45; --radius: 12px;
+  --sidebar-w: 280px;
 }
 * { margin: 0; padding: 0; box-sizing: border-box; }
 body { font-family: system-ui, sans-serif; background: var(--bg); color: var(--text); min-height: 100dvh; display: flex; flex-direction: column; }
@@ -42,6 +43,7 @@ input:focus { border-color: var(--accent); }
 .msg.user { background: var(--accent); color: #fff; align-self: flex-end; border-bottom-right-radius: 4px; }
 .msg.system { background: var(--accent-light); align-self: center; text-align: center; font-size: 0.85rem; color: var(--text-sub); max-width: 90%; }
 .msg.notification { background: rgba(225,112,85,0.15); align-self: center; text-align: center; font-size: 0.85rem; color: var(--red); max-width: 90%; border-radius: 8px; }
+.msg.group-msg { background: rgba(108,92,231,0.15); align-self: center; text-align: center; font-size: 0.85rem; color: var(--accent); max-width: 90%; border-radius: 8px; border: 1px solid rgba(108,92,231,0.3); }
 .typing::after { content: '...'; animation: dots 1.2s steps(4, end) infinite; }
 @keyframes dots { 0%{content:''} 25%{content:'.'} 50%{content:'..'} 75%{content:'...'} }
 .msg .copy-msg-btn { display: block; margin-top: 8px; background: var(--accent-light); color: var(--accent); padding: 6px 12px; border-radius: 8px; font-size: 0.8rem; text-align: center; cursor: pointer; border: 1px solid var(--accent); }
@@ -99,19 +101,78 @@ input:focus { border-color: var(--accent); }
 .pj-card {
   background: var(--bg-card); border-radius: var(--radius); padding: 16px;
   margin-bottom: 12px; cursor: pointer; transition: all 0.2s;
-  border: 1px solid var(--border);
+  border: 1px solid var(--border); position: relative;
 }
 .pj-card:hover { border-color: var(--accent); transform: translateY(-1px); }
-.pj-card .pj-name { font-size: 1.1rem; font-weight: bold; margin-bottom: 8px; }
+.pj-card .pj-name { font-size: 1.1rem; font-weight: bold; margin-bottom: 8px; padding-right: 32px; }
 .pj-card .pj-meta { font-size: 0.8rem; color: var(--text-sub); display: flex; gap: 12px; flex-wrap: wrap; }
 .pj-card .pj-counts { display: flex; gap: 8px; margin-top: 8px; }
 .pj-card .pj-count { font-size: 0.75rem; padding: 2px 8px; border-radius: 50px; }
+.pj-delete-btn {
+  position: absolute; top: 12px; right: 12px;
+  background: none; color: var(--text-sub); font-size: 1.2rem;
+  padding: 2px 6px; border-radius: 4px; line-height: 1;
+}
+.pj-delete-btn:hover { color: var(--red); background: rgba(225,112,85,0.15); }
 .pj-empty { color: var(--text-sub); text-align: center; padding: 60px 20px; }
+.pj-section-title { color: var(--text-sub); font-size: 0.85rem; font-weight: bold; margin: 20px 0 10px; padding-bottom: 6px; border-bottom: 1px solid var(--border); }
+.pj-section-title:first-child { margin-top: 0; }
 .btn-secondary {
   background: var(--bg-card); color: var(--accent); padding: 12px 32px;
   font-size: 1rem; border: 2px solid var(--accent); border-radius: 50px;
 }
 .btn-secondary:hover { background: var(--accent); color: #fff; }
+
+/* ブロードキャスト通知エリア */
+.broadcast-area {
+  background: var(--bg-card); padding: 12px 16px; margin-bottom: 16px;
+  border-radius: var(--radius); border: 1px solid var(--border);
+}
+.broadcast-area label { display: block; font-size: 0.85rem; color: var(--text-sub); margin-bottom: 8px; }
+.broadcast-row { display: flex; gap: 8px; }
+.broadcast-row input { flex: 1; padding: 10px 14px; font-size: 0.9rem; }
+.broadcast-btn { background: var(--accent); color: #fff; padding: 10px 18px; font-size: 0.85rem; white-space: nowrap; }
+.broadcast-btn:hover { background: var(--accent-hover); }
+
+/* 左サイドバー（ホストチャット） */
+.host-chat-wrapper { display: flex; flex: 1; overflow: hidden; }
+.sidebar {
+  width: var(--sidebar-w); background: var(--bg-card); border-right: 1px solid var(--border);
+  display: flex; flex-direction: column; flex-shrink: 0; overflow: hidden;
+}
+.sidebar-header {
+  padding: 16px; font-size: 0.9rem; font-weight: bold; color: var(--text-sub);
+  border-bottom: 1px solid var(--border); flex-shrink: 0;
+}
+.sidebar-list { flex: 1; overflow-y: auto; }
+.sidebar-item {
+  padding: 12px 16px; cursor: pointer; border-bottom: 1px solid var(--border);
+  transition: background 0.15s;
+}
+.sidebar-item:hover { background: var(--bg-input); }
+.sidebar-item.active { background: var(--accent-light); border-left: 3px solid var(--accent); }
+.sidebar-item .sb-name { font-size: 0.9rem; font-weight: bold; margin-bottom: 4px; }
+.sidebar-item .sb-preview { font-size: 0.75rem; color: var(--text-sub); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.chat-main { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+.hamburger-btn {
+  background: none; color: var(--text-sub); font-size: 1.4rem;
+  padding: 4px 8px; display: none;
+}
+.hamburger-btn:hover { color: var(--text); }
+.sidebar-overlay {
+  display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+  background: rgba(0,0,0,0.5); z-index: 99;
+}
+.sidebar-overlay.show { display: block; }
+
+@media (max-width: 768px) {
+  .sidebar {
+    position: fixed; top: 0; left: 0; bottom: 0; z-index: 100;
+    transform: translateX(-100%); transition: transform 0.25s ease;
+  }
+  .sidebar.open { transform: translateX(0); }
+  .hamburger-btn { display: block; }
+}
 </style>
 </head>
 <body>
@@ -128,14 +189,24 @@ input:focus { border-color: var(--accent); }
 
 <div id="host-chat" class="screen">
   <div class="header">
+    <button class="hamburger-btn" id="hamburgerBtn" onclick="toggleSidebar()">☰</button>
     <button class="back-btn" onclick="showProjectList()">←</button>
     <h2 id="hostChatTitle">飲み会エージェント</h2>
     <button class="header-btn" onclick="showDashboard()" id="dashBtn">管理<span class="badge" id="dashBadge"></span></button>
   </div>
-  <div class="chat-messages" id="hostMessages"></div>
-  <div class="chat-input-area">
-    <textarea id="hostInput" placeholder="メッセージを入力..." rows="1" onkeydown="handleKey(event,'host')" oninput="autoResize(this)"></textarea>
-    <button class="send-btn" id="hostSendBtn" onclick="sendHostMsg()">送信</button>
+  <div class="host-chat-wrapper">
+    <div class="sidebar-overlay" id="sidebarOverlay" onclick="toggleSidebar()"></div>
+    <div class="sidebar" id="chatSidebar">
+      <div class="sidebar-header">会話スレッド</div>
+      <div class="sidebar-list" id="sidebarList"></div>
+    </div>
+    <div class="chat-main">
+      <div class="chat-messages" id="hostMessages"></div>
+      <div class="chat-input-area">
+        <textarea id="hostInput" placeholder="メッセージを入力..." rows="1" onkeydown="handleKey(event,'host')" oninput="autoResize(this)"></textarea>
+        <button class="send-btn" id="hostSendBtn" onclick="sendHostMsg()">送信</button>
+      </div>
+    </div>
   </div>
 </div>
 
@@ -158,6 +229,13 @@ input:focus { border-color: var(--accent); }
     <dl class="party-detail" id="dashDetail"></dl>
   </div>
   <div class="dash-body">
+    <div class="broadcast-area">
+      <label>📢 全員に通知を送る</label>
+      <div class="broadcast-row">
+        <input type="text" id="broadcastInput" placeholder="メッセージを入力..." />
+        <button class="broadcast-btn" onclick="sendBroadcast()">送信</button>
+      </div>
+    </div>
     <div class="tab-bar">
       <button class="tab-btn active" onclick="switchTab(this,'tab-members')">参加者</button>
       <button class="tab-btn" onclick="switchTab(this,'tab-notifs')">通知<span class="badge" id="notifBadge"></span></button>
@@ -196,6 +274,7 @@ const EXPIRY_H = 24;
 let pjId = null, memberId = null;
 let hostHistory = [], memberHistory = [];
 let sending = false;
+let currentThreadId = null; // null = AIチャット(ホスト), member_id = 参加者スレッド
 
 /* === ユーティリティ === */
 function show(id) {
@@ -206,9 +285,20 @@ function show(id) {
 function showScreen(id) { show(id); }
 function esc(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
 function fmt(d) { return new Date(d).toLocaleString('ja-JP', { month:'numeric', day:'numeric', hour:'2-digit', minute:'2-digit' }); }
-// APIキーはローカル保存（端末固有）
 function getApiKey() { return document.getElementById('apiKeyInput').value || localStorage.getItem('nomikai-openai-key') || ''; }
 function saveApiKey(k) { localStorage.setItem('nomikai-openai-key', k); }
+
+/* === サイドバー制御 === */
+function toggleSidebar() {
+  const sb = document.getElementById('chatSidebar');
+  const ov = document.getElementById('sidebarOverlay');
+  sb.classList.toggle('open');
+  ov.classList.toggle('show');
+}
+function closeSidebar() {
+  document.getElementById('chatSidebar').classList.remove('open');
+  document.getElementById('sidebarOverlay').classList.remove('show');
+}
 
 /* === Supabase データ操作 === */
 async function dbGetProject(id) {
@@ -221,6 +311,12 @@ async function dbGetAllProjects() {
 }
 async function dbSaveProject(pj) {
   await sb.from('projects').upsert(pj);
+}
+async function dbDeleteProject(id) {
+  await sb.from('chat_messages').delete().eq('project_id', id);
+  await sb.from('notifications').delete().eq('project_id', id);
+  await sb.from('members').delete().eq('project_id', id);
+  await sb.from('projects').delete().eq('id', id);
 }
 async function dbGetMembers(projectId) {
   const { data } = await sb.from('members').select('*').eq('project_id', projectId).order('slot');
@@ -242,6 +338,28 @@ async function dbGetChat(projectId, memberId) {
   else q.is('member_id', null);
   const { data } = await q;
   return (data || []).map(r => ({ role: r.role, content: r.content }));
+}
+async function dbGetChatWithTimestamp(projectId, memberId) {
+  const q = sb.from('chat_messages').select('*').eq('project_id', projectId).order('created_at');
+  if (memberId === 'group') {
+    q.eq('member_id', 'group');
+  } else if (memberId) {
+    q.eq('member_id', memberId);
+  } else {
+    q.is('member_id', null);
+  }
+  const { data } = await q;
+  return (data || []).map(r => ({ role: r.role, content: r.content, created_at: r.created_at, member_id: r.member_id }));
+}
+async function dbGetMergedMemberChat(projectId, memberId) {
+  // 個別メッセージとgroupメッセージを両方取得して時系列マージ
+  const { data: individual } = await sb.from('chat_messages').select('*')
+    .eq('project_id', projectId).eq('member_id', memberId).order('created_at');
+  const { data: group } = await sb.from('chat_messages').select('*')
+    .eq('project_id', projectId).eq('member_id', 'group').order('created_at');
+  const all = [...(individual || []), ...(group || [])];
+  all.sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
+  return all.map(r => ({ role: r.role, content: r.content, member_id: r.member_id, created_at: r.created_at }));
 }
 async function dbAddChat(projectId, memberId, role, content) {
   await sb.from('chat_messages').insert({
@@ -326,12 +444,12 @@ async function createProject() {
 
   await dbSaveProject({ id: pjId, status: 'ヒアリング中', details: {} });
 
-  // スロットはヒアリング後に人数分作成するため、ここでは作らない
-
   hostHistory = [];
+  currentThreadId = null;
   show('host-chat');
   document.getElementById('hostMessages').innerHTML = '';
   document.getElementById('hostChatTitle').textContent = '飲み会エージェント';
+  await renderSidebar();
   initHostChat();
 }
 
@@ -345,6 +463,7 @@ async function initHostChat() {
     await dbAddChat(pjId, null, 'assistant', reply);
     rmTyping('hostMessages');
     addMsg('hostMessages', 'ai', reply);
+    await renderSidebar();
   } catch (e) { rmTyping('hostMessages'); addMsg('hostMessages', 'system', 'エラー: ' + e.message); }
 }
 
@@ -354,6 +473,14 @@ async function sendHostMsg() {
   if (!text) return;
   inp.value = ''; inp.style.height = 'auto'; sending = true;
   document.getElementById('hostSendBtn').disabled = true;
+
+  // 参加者スレッド表示中は閲覧のみ（送信不可）
+  if (currentThreadId !== null) {
+    sending = false;
+    document.getElementById('hostSendBtn').disabled = false;
+    return;
+  }
+
   addMsg('hostMessages', 'user', text);
   hostHistory.push({ role: 'user', content: text });
   await dbAddChat(pjId, null, 'user', text);
@@ -365,6 +492,7 @@ async function sendHostMsg() {
     rmTyping('hostMessages');
     addMsg('hostMessages', 'ai', reply);
     await processHostReply(reply, text);
+    await renderSidebar();
   } catch (e) { rmTyping('hostMessages'); addMsg('hostMessages', 'system', 'エラー: ' + e.message); }
   sending = false;
   document.getElementById('hostSendBtn').disabled = false;
@@ -436,7 +564,6 @@ async function processHostReply(reply, userMsg) {
     const m6 = reply.match(/📝\s*備考[:：]\s*(.+)/); if (m6) d.note = m6[1].trim();
     await dbSaveProject({ id: pjId, status: '参加者登録中', details: d });
     if (d.name) document.getElementById('hostChatTitle').textContent = d.name;
-    // 人数分のスロットを作成
     const slotCount = parseInt(String(d.headcount || DEFAULT_SLOTS).replace(/[^0-9]/g, '')) || DEFAULT_SLOTS;
     const existingMembers = await dbGetMembers(pjId);
     if (existingMembers.length === 0) {
@@ -493,6 +620,94 @@ async function broadcastToMembers(msg) {
   }
 }
 
+/* === ブロードキャスト（全員に通知）=== */
+async function sendBroadcast() {
+  const inp = document.getElementById('broadcastInput');
+  const text = inp.value.trim();
+  if (!text || !pjId) return;
+  inp.value = '';
+  // グループメッセージとして保存（member_id='group'）
+  await sb.from('chat_messages').insert({
+    project_id: pjId, member_id: 'group', role: 'assistant', content: text
+  });
+  // ホストチャットにも📢メッセージ追加
+  await dbAddChat(pjId, null, 'assistant', '📢 全員への通知: ' + text);
+  await notify('broadcast', '全員への通知を送信: ' + text);
+  // ホストチャットが表示中なら更新
+  if (currentThreadId === null && document.getElementById('host-chat').classList.contains('active')) {
+    addMsg('hostMessages', 'notification', '📢 全員への通知: ' + text);
+  }
+  alert('全員への通知を送信しました');
+}
+
+/* === サイドバーレンダリング === */
+async function renderSidebar() {
+  if (!pjId) return;
+  const list = document.getElementById('sidebarList');
+  if (!list) return;
+
+  // AIチャット（ホスト-AI対話）のプレビュー
+  const hostMsgs = await dbGetChatWithTimestamp(pjId, null);
+  const lastHostMsg = hostMsgs.length > 0 ? hostMsgs[hostMsgs.length - 1].content : '';
+  const hostPreview = lastHostMsg.substring(0, 30) + (lastHostMsg.length > 30 ? '...' : '');
+
+  let html = `<div class="sidebar-item ${currentThreadId === null ? 'active' : ''}" onclick="selectThread(null)">
+    <div class="sb-name">🤖 AIチャット</div>
+    <div class="sb-preview">${esc(hostPreview || 'まだメッセージはありません')}</div>
+  </div>`;
+
+  // 各参加者のスレッド
+  const members = (await dbGetMembers(pjId)).filter(m => m.name);
+  for (const m of members) {
+    const msgs = await dbGetChatWithTimestamp(pjId, m.id);
+    const lastMsg = msgs.length > 0 ? msgs[msgs.length - 1].content : '';
+    const preview = lastMsg.substring(0, 30) + (lastMsg.length > 30 ? '...' : '');
+    html += `<div class="sidebar-item ${currentThreadId === m.id ? 'active' : ''}" onclick="selectThread('${m.id}')">
+      <div class="sb-name">👤 ${esc(m.name)}</div>
+      <div class="sb-preview">${esc(preview || 'まだメッセージはありません')}</div>
+    </div>`;
+  }
+
+  list.innerHTML = html;
+}
+
+async function selectThread(threadId) {
+  currentThreadId = threadId;
+  closeSidebar();
+  const msgContainer = document.getElementById('hostMessages');
+  msgContainer.innerHTML = '';
+  const inputArea = document.querySelector('#host-chat .chat-input-area');
+
+  if (threadId === null) {
+    // AIチャット（ホスト-AI対話）
+    inputArea.style.display = '';
+    hostHistory = await dbGetChat(pjId, null);
+    hostHistory.forEach(m => {
+      if (m.content.startsWith('📢')) addMsg('hostMessages', 'notification', m.content);
+      else addMsg('hostMessages', m.role === 'user' ? 'user' : 'ai', m.content);
+    });
+  } else {
+    // 参加者スレッド（閲覧のみ）
+    inputArea.style.display = 'none';
+    const msgs = await dbGetChatWithTimestamp(pjId, threadId);
+    msgs.forEach(m => {
+      if (m.content.startsWith('📢')) addMsg('hostMessages', 'notification', m.content);
+      else addMsg('hostMessages', m.role === 'user' ? 'user' : 'ai', m.content);
+    });
+  }
+
+  // サイドバーのハイライト更新
+  document.querySelectorAll('#sidebarList .sidebar-item').forEach(el => el.classList.remove('active'));
+  const items = document.querySelectorAll('#sidebarList .sidebar-item');
+  if (threadId === null) {
+    if (items[0]) items[0].classList.add('active');
+  } else {
+    const members = (await dbGetMembers(pjId)).filter(m => m.name);
+    const idx = members.findIndex(m => m.id === threadId);
+    if (idx >= 0 && items[idx + 1]) items[idx + 1].classList.add('active');
+  }
+}
+
 /* === 飲み会一覧 === */
 async function showProjectList() {
   show('project-list');
@@ -502,7 +717,11 @@ async function showProjectList() {
     document.getElementById('pjListBody').innerHTML = '<div class="pj-empty"><p>まだ飲み会がありません</p></div>';
     return;
   }
-  let html = '';
+
+  const now = new Date();
+  const upcoming = [];
+  const past = [];
+
   for (const pj of projects) {
     const d = pj.details || {};
     const members = await dbGetMembers(pj.id);
@@ -510,7 +729,38 @@ async function showProjectList() {
     const pending = members.filter(m => m.status === '未回答').length;
     const registered = members.filter(m => m.name).length;
     const sc = pj.status === '中止' ? 'no' : pj.status === '運用中' ? 'yes' : 'pending';
-    html += `<div class="pj-card" onclick="openProject('${pj.id}')">
+
+    const cardData = { pj, d, members, joined, pending, registered, sc };
+
+    // 日付パース: dateから数値を抽出して日付比較
+    let isPast = false;
+    if (d.date) {
+      try {
+        const nums = d.date.match(/\d+/g);
+        if (nums && nums.length >= 2) {
+          let year, month, day;
+          if (nums.length >= 3 && nums[0].length === 4) {
+            year = parseInt(nums[0]); month = parseInt(nums[1]); day = parseInt(nums[2]);
+          } else if (nums.length >= 2) {
+            year = now.getFullYear();
+            month = parseInt(nums[0]); day = parseInt(nums[1]);
+          }
+          if (year && month && day) {
+            const eventDate = new Date(year, month - 1, day, 23, 59, 59);
+            if (eventDate < now) isPast = true;
+          }
+        }
+      } catch (e) { /* パース失敗 → これから扱い */ }
+    }
+
+    if (isPast) past.push(cardData);
+    else upcoming.push(cardData);
+  }
+
+  function renderCard(c) {
+    const { pj, d, members, joined, pending, registered, sc } = c;
+    return `<div class="pj-card" onclick="openProject('${pj.id}')">
+      <button class="pj-delete-btn" onclick="event.stopPropagation();deleteProject('${pj.id}')" title="削除">×</button>
       <div class="pj-name">${esc(d.name || '(名称未定)')}</div>
       <div class="pj-meta">
         ${d.date ? `<span>📅 ${esc(d.date)}</span>` : ''}
@@ -524,7 +774,25 @@ async function showProjectList() {
       </div>
     </div>`;
   }
+
+  let html = '';
+  if (upcoming.length > 0) {
+    html += `<div class="pj-section-title">🔜 これからの飲み会 (${upcoming.length})</div>`;
+    html += upcoming.map(renderCard).join('');
+  }
+  if (past.length > 0) {
+    html += `<div class="pj-section-title">📁 過去の飲み会 (${past.length})</div>`;
+    html += past.map(renderCard).join('');
+  }
+
   document.getElementById('pjListBody').innerHTML = html;
+}
+
+async function deleteProject(id) {
+  if (!confirm('この飲み会を削除しますか？\n関連するすべてのデータ（参加者、チャット、通知）が削除されます。')) return;
+  await dbDeleteProject(id);
+  if (pjId === id) pjId = null;
+  await showProjectList();
 }
 
 /** 一覧からPJを選択しダッシュボードを開く */
@@ -536,23 +804,28 @@ async function openProject(id) {
 /** ホストチャットをDBから復元して表示する */
 async function resumeHostChat(id) {
   pjId = id;
+  currentThreadId = null;
   const savedKey = localStorage.getItem('nomikai-openai-key');
   if (savedKey) document.getElementById('apiKeyInput').value = savedKey;
 
   show('host-chat');
   document.getElementById('hostMessages').innerHTML = '';
+  const inputArea = document.querySelector('#host-chat .chat-input-area');
+  inputArea.style.display = '';
 
   // DBからチャット履歴を復元
   hostHistory = await dbGetChat(pjId, null);
   if (hostHistory.length > 0) {
     hostHistory.forEach(m => {
-      addMsg('hostMessages', m.role === 'user' ? 'user' : 'ai', m.content);
+      if (m.content.startsWith('📢')) addMsg('hostMessages', 'notification', m.content);
+      else addMsg('hostMessages', m.role === 'user' ? 'user' : 'ai', m.content);
     });
   }
 
   const pj = await dbGetProject(pjId);
   document.getElementById('hostChatTitle').textContent = pj?.details?.name || '飲み会エージェント';
   await updateBadge();
+  await renderSidebar();
 }
 
 /* === ダッシュボード === */
@@ -764,15 +1037,25 @@ async function startMemberChat(pid, mid) {
   document.getElementById('memberInputArea').style.display = '';
   document.getElementById('memberChatTitle').textContent = (pj.details?.name || '飲み会') + ' - ' + member.name;
 
-  memberHistory = await dbGetChat(pid, mid);
-  if (memberHistory.length > 0) {
-    memberHistory.forEach(m => {
-      if (m.content.startsWith('📢')) addMsg('memberMessages', 'notification', m.content);
-      else addMsg('memberMessages', m.role === 'user' ? 'user' : 'ai', m.content);
+  // 個別メッセージ + グループメッセージを時系列マージで取得
+  const mergedMsgs = await dbGetMergedMemberChat(pid, mid);
+
+  if (mergedMsgs.length > 0) {
+    // memberHistoryはAI呼び出し用なので個別メッセージのみ
+    memberHistory = mergedMsgs.filter(m => m.member_id !== 'group').map(m => ({ role: m.role, content: m.content }));
+    mergedMsgs.forEach(m => {
+      if (m.member_id === 'group') {
+        addMsg('memberMessages', 'group-msg', '📢 幹事から: ' + m.content);
+      } else if (m.content.startsWith('📢')) {
+        addMsg('memberMessages', 'notification', m.content);
+      } else {
+        addMsg('memberMessages', m.role === 'user' ? 'user' : 'ai', m.content);
+      }
     });
     return;
   }
 
+  // 初回メッセージ
   addMsg('memberMessages', 'ai', null);
   try {
     const reply = await callAI(await memberPrompt(member), [{ role: 'user', content: 'こんにちは' }]);
