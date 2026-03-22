@@ -1,0 +1,766 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>飲み会エージェント</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+<style>
+:root {
+  --bg: #0f0f1a; --bg-card: #1a1a2e; --bg-input: #252540;
+  --text: #e8e8f0; --text-sub: #8888aa;
+  --accent: #6c5ce7; --accent-hover: #7c6cf7; --accent-light: rgba(108,92,231,0.15);
+  --green: #00b894; --red: #e17055; --yellow: #fdcb6e; --border: #2a2a45; --radius: 12px;
+}
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: system-ui, sans-serif; background: var(--bg); color: var(--text); min-height: 100dvh; display: flex; flex-direction: column; }
+button { font-family: inherit; font-size: 1rem; border: none; cursor: pointer; border-radius: var(--radius); transition: all 0.2s; }
+input { font-family: inherit; font-size: 1rem; background: var(--bg-input); color: var(--text); border: 1px solid var(--border); border-radius: var(--radius); padding: 12px 16px; outline: none; width: 100%; }
+input:focus { border-color: var(--accent); }
+.screen { display: none; flex-direction: column; flex: 1; }
+.screen.active { display: flex; }
+
+#top { justify-content: center; align-items: center; padding: 24px; text-align: center; gap: 32px; }
+#top h1 { font-size: 2rem; }
+#top .subtitle { color: var(--text-sub); font-size: 1.1rem; line-height: 1.6; }
+.btn-primary { background: var(--accent); color: #fff; padding: 16px 48px; font-size: 1.2rem; font-weight: bold; border-radius: 50px; }
+.btn-primary:hover { background: var(--accent-hover); transform: scale(1.03); }
+.api-section { background: var(--bg-card); padding: 20px; border-radius: var(--radius); max-width: 480px; width: 100%; }
+.api-section label { display: block; margin-bottom: 8px; color: var(--text-sub); font-size: 0.9rem; }
+
+.header { background: var(--bg-card); padding: 16px 20px; display: flex; align-items: center; gap: 12px; border-bottom: 1px solid var(--border); flex-shrink: 0; }
+.back-btn { background: none; color: var(--text-sub); font-size: 1.3rem; padding: 4px 8px; }
+.back-btn:hover { color: var(--text); }
+.header h2 { font-size: 1.1rem; flex: 1; }
+.header-btn { background: var(--accent); color: #fff; padding: 8px 16px; font-size: 0.85rem; position: relative; }
+.badge { position: absolute; top: -6px; right: -6px; background: var(--red); color: #fff; font-size: 0.7rem; min-width: 18px; height: 18px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: bold; }
+.badge:empty { display: none; }
+
+.chat-messages { flex: 1; overflow-y: auto; padding: 20px; display: flex; flex-direction: column; gap: 12px; }
+.msg { max-width: 85%; padding: 12px 16px; border-radius: 16px; line-height: 1.6; font-size: 0.95rem; white-space: pre-wrap; word-break: break-word; }
+.msg.ai { background: var(--bg-card); align-self: flex-start; border-bottom-left-radius: 4px; }
+.msg.user { background: var(--accent); color: #fff; align-self: flex-end; border-bottom-right-radius: 4px; }
+.msg.system { background: var(--accent-light); align-self: center; text-align: center; font-size: 0.85rem; color: var(--text-sub); max-width: 90%; }
+.msg.notification { background: rgba(225,112,85,0.15); align-self: center; text-align: center; font-size: 0.85rem; color: var(--red); max-width: 90%; border-radius: 8px; }
+.typing::after { content: '...'; animation: dots 1.2s steps(4, end) infinite; }
+@keyframes dots { 0%{content:''} 25%{content:'.'} 50%{content:'..'} 75%{content:'...'} }
+.msg .copy-msg-btn { display: block; margin-top: 8px; background: var(--accent-light); color: var(--accent); padding: 6px 12px; border-radius: 8px; font-size: 0.8rem; text-align: center; cursor: pointer; border: 1px solid var(--accent); }
+.msg .copy-msg-btn:hover { background: var(--accent); color: #fff; }
+
+.chat-input-area { background: var(--bg-card); padding: 16px 20px; display: flex; gap: 12px; border-top: 1px solid var(--border); flex-shrink: 0; }
+.chat-input-area textarea { flex: 1; resize: none; min-height: 44px; max-height: 120px; line-height: 1.4; font-family: inherit; font-size: 1rem; background: var(--bg-input); color: var(--text); border: 1px solid var(--border); border-radius: var(--radius); padding: 12px 16px; outline: none; }
+.chat-input-area textarea:focus { border-color: var(--accent); }
+.send-btn { background: var(--accent); color: #fff; padding: 12px 20px; font-weight: bold; flex-shrink: 0; }
+.send-btn:hover { background: var(--accent-hover); }
+.send-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.dash-header-info { background: var(--bg-card); padding: 16px 20px; border-bottom: 1px solid var(--border); }
+.dash-summary { display: grid; grid-template-columns: repeat(auto-fit, minmax(70px, 1fr)); gap: 8px; margin-bottom: 12px; }
+.stat { background: var(--bg); border-radius: var(--radius); padding: 10px; text-align: center; }
+.stat .num { font-size: 1.3rem; font-weight: bold; }
+.stat .label { font-size: 0.7rem; color: var(--text-sub); margin-top: 2px; }
+.party-detail { display: grid; grid-template-columns: auto 1fr; gap: 4px 12px; font-size: 0.85rem; }
+.party-detail dt { color: var(--text-sub); }
+.dash-body { flex: 1; overflow-y: auto; padding: 16px; }
+.tab-bar { display: flex; gap: 0; margin-bottom: 16px; border-bottom: 2px solid var(--border); }
+.tab-btn { flex: 1; padding: 10px; text-align: center; background: none; color: var(--text-sub); font-size: 0.85rem; border-radius: 0; position: relative; }
+.tab-btn.active { color: var(--accent); }
+.tab-btn.active::after { content: ''; position: absolute; bottom: -2px; left: 0; right: 0; height: 2px; background: var(--accent); }
+.slot-card { background: var(--bg-card); border-radius: var(--radius); padding: 14px; margin-bottom: 10px; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.slot-num { background: var(--bg-input); color: var(--text-sub); width: 28px; height: 28px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 0.8rem; font-weight: bold; flex-shrink: 0; }
+.slot-name { flex: 1; font-weight: bold; min-width: 60px; }
+.slot-name.empty { color: var(--text-sub); font-weight: normal; font-style: italic; }
+.slot-name-input { width: 120px; padding: 6px 10px; font-size: 0.9rem; flex: 0; }
+.status-badge { padding: 4px 10px; border-radius: 50px; font-size: 0.7rem; font-weight: bold; }
+.status-badge.yes { background: rgba(0,184,148,0.2); color: var(--green); }
+.status-badge.no { background: rgba(225,112,85,0.2); color: var(--red); }
+.status-badge.cancel { background: rgba(225,112,85,0.3); color: var(--red); }
+.status-badge.pending { background: rgba(253,203,110,0.2); color: var(--yellow); }
+.status-badge.expired { background: rgba(136,136,170,0.2); color: var(--text-sub); }
+.status-badge.vacant { background: var(--bg-input); color: var(--text-sub); }
+.small-btn { background: var(--bg-input); color: var(--text-sub); padding: 5px 8px; font-size: 0.7rem; border: 1px solid var(--border); }
+.small-btn:hover { color: var(--text); border-color: var(--accent); }
+.small-btn.copied { color: var(--green); border-color: var(--green); }
+.slot-meta { font-size: 0.7rem; color: var(--text-sub); width: 100%; padding-left: 38px; }
+.notif-item { padding: 10px 14px; border-left: 3px solid var(--accent); background: var(--bg-card); margin-bottom: 8px; border-radius: 0 8px 8px 0; font-size: 0.85rem; }
+.notif-item .notif-time { color: var(--text-sub); font-size: 0.75rem; margin-right: 8px; }
+.notif-item.unread { border-left-color: var(--red); background: rgba(225,112,85,0.08); }
+.settlement-row { display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid var(--border); font-size: 0.9rem; }
+.settlement-input { width: 140px; padding: 8px; text-align: right; }
+.settlement-total { font-weight: bold; font-size: 1.1rem; color: var(--green); }
+.expired-screen { display: flex; flex-direction: column; justify-content: center; align-items: center; padding: 40px; text-align: center; gap: 16px; flex: 1; }
+.expired-screen h2 { color: var(--red); }
+.expired-screen p { color: var(--text-sub); }
+.loading { display: flex; justify-content: center; align-items: center; padding: 40px; color: var(--text-sub); }
+</style>
+</head>
+<body>
+
+<div id="top" class="screen active">
+  <div><h1>🍻 飲み会エージェント</h1><p class="subtitle">AIが幹事の代わりに<br>参加者とのやりとりを仕切ります</p></div>
+  <div class="api-section">
+    <label>OpenAI API Key（デモ用）</label>
+    <input type="password" id="apiKeyInput" placeholder="sk-..." />
+  </div>
+  <button class="btn-primary" onclick="createProject()">新しい飲み会を作る</button>
+</div>
+
+<div id="host-chat" class="screen">
+  <div class="header">
+    <button class="back-btn" onclick="showScreen('top')">←</button>
+    <h2 id="hostChatTitle">飲み会エージェント</h2>
+    <button class="header-btn" onclick="showDashboard()" id="dashBtn">管理<span class="badge" id="dashBadge"></span></button>
+  </div>
+  <div class="chat-messages" id="hostMessages"></div>
+  <div class="chat-input-area">
+    <textarea id="hostInput" placeholder="メッセージを入力..." rows="1" onkeydown="handleKey(event,'host')" oninput="autoResize(this)"></textarea>
+    <button class="send-btn" id="hostSendBtn" onclick="sendHostMsg()">送信</button>
+  </div>
+</div>
+
+<div id="dashboard" class="screen">
+  <div class="header">
+    <button class="back-btn" onclick="showScreen('host-chat')">←</button>
+    <h2 id="dashTitle">ダッシュボード</h2>
+    <button class="header-btn" onclick="showScreen('host-chat')">チャット</button>
+  </div>
+  <div class="dash-header-info">
+    <div class="dash-summary" id="dashSummary"></div>
+    <dl class="party-detail" id="dashDetail"></dl>
+  </div>
+  <div class="dash-body">
+    <div class="tab-bar">
+      <button class="tab-btn active" onclick="switchTab(this,'tab-members')">参加者 (10枠)</button>
+      <button class="tab-btn" onclick="switchTab(this,'tab-notifs')">通知<span class="badge" id="notifBadge"></span></button>
+      <button class="tab-btn" onclick="switchTab(this,'tab-settle')">精算</button>
+    </div>
+    <div id="tab-members"></div>
+    <div id="tab-notifs" style="display:none"></div>
+    <div id="tab-settle" style="display:none"></div>
+  </div>
+</div>
+
+<div id="member-chat" class="screen">
+  <div class="header"><h2 id="memberChatTitle">飲み会エージェント</h2></div>
+  <div class="chat-messages" id="memberMessages"></div>
+  <div class="chat-input-area" id="memberInputArea">
+    <textarea id="memberInput" placeholder="メッセージを入力..." rows="1" onkeydown="handleKey(event,'member')" oninput="autoResize(this)"></textarea>
+    <button class="send-btn" id="memberSendBtn" onclick="sendMemberMsg()">送信</button>
+  </div>
+</div>
+
+<div id="expired" class="screen">
+  <div class="expired-screen">
+    <h2>⏰ 招待リンクの期限切れ</h2>
+    <p>この招待リンクは有効期限（24時間）を過ぎています。<br>幹事にお問い合わせください。</p>
+  </div>
+</div>
+
+<script>
+/* === Supabase初期化 === */
+const SUPA_URL = 'https://ypdixvgdufiwcktyzfeb.supabase.co';
+const SUPA_KEY = 'sb_publishable_MG3n2K9eG3UyekrZLMlLHw_zTSF0LpB';
+const sb = supabase.createClient(SUPA_URL, SUPA_KEY);
+
+const MAX_SLOTS = 10;
+const EXPIRY_H = 24;
+let pjId = null, memberId = null;
+let hostHistory = [], memberHistory = [];
+let sending = false;
+
+/* === ユーティリティ === */
+function show(id) {
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+  if (id === 'host-chat') updateBadge();
+}
+function showScreen(id) { show(id); }
+function esc(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
+function fmt(d) { return new Date(d).toLocaleString('ja-JP', { month:'numeric', day:'numeric', hour:'2-digit', minute:'2-digit' }); }
+// APIキーはローカル保存（端末固有）
+function getApiKey() { return document.getElementById('apiKeyInput').value || localStorage.getItem('nomikai-openai-key') || ''; }
+function saveApiKey(k) { localStorage.setItem('nomikai-openai-key', k); }
+
+/* === Supabase データ操作 === */
+async function dbGetProject(id) {
+  const { data } = await sb.from('projects').select('*').eq('id', id).single();
+  return data;
+}
+async function dbSaveProject(pj) {
+  await sb.from('projects').upsert(pj);
+}
+async function dbGetMembers(projectId) {
+  const { data } = await sb.from('members').select('*').eq('project_id', projectId).order('slot');
+  return data || [];
+}
+async function dbSaveMember(m) {
+  await sb.from('members').upsert({
+    id: m.id, project_id: m.project_id, slot: m.slot,
+    name: m.name, status: m.status,
+    invited_at: m.invited_at, expires_at: m.expires_at,
+    cancel_fee: m.cancel_fee, last_updated: m.last_updated
+  });
+}
+async function dbGetChat(projectId, memberId) {
+  const q = sb.from('chat_messages').select('*').eq('project_id', projectId).order('created_at');
+  if (memberId) q.eq('member_id', memberId);
+  else q.is('member_id', null);
+  const { data } = await q;
+  return (data || []).map(r => ({ role: r.role, content: r.content }));
+}
+async function dbAddChat(projectId, memberId, role, content) {
+  await sb.from('chat_messages').insert({
+    project_id: projectId, member_id: memberId || null, role, content
+  });
+}
+async function dbGetNotifs(projectId) {
+  const { data } = await sb.from('notifications').select('*').eq('project_id', projectId).order('created_at');
+  return data || [];
+}
+async function dbAddNotif(projectId, type, message) {
+  await sb.from('notifications').insert({ project_id: projectId, type, message });
+}
+async function dbMarkNotifsRead(projectId) {
+  await sb.from('notifications').update({ read: true }).eq('project_id', projectId).eq('read', false);
+}
+
+/* === OpenAI API === */
+async function callAI(sys, msgs) {
+  const key = getApiKey();
+  if (!key) throw new Error('APIキーが未設定');
+  saveApiKey(key);
+  const r = await fetch('https://api.openai.com/v1/chat/completions', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + key },
+    body: JSON.stringify({
+      model: 'gpt-4o-mini', max_tokens: 1024,
+      messages: [{ role: 'system', content: sys }, ...msgs.map(m => ({ role: m.role === 'assistant' ? 'assistant' : 'user', content: m.content }))]
+    })
+  });
+  if (!r.ok) { const e = await r.json().catch(() => ({})); throw new Error(e.error?.message || 'API Error ' + r.status); }
+  return (await r.json()).choices[0].message.content;
+}
+
+/* === 通知 === */
+async function notify(type, msg) {
+  if (!pjId) return;
+  await dbAddNotif(pjId, type, msg);
+  updateBadge();
+}
+async function updateBadge() {
+  if (!pjId) return;
+  const notifs = await dbGetNotifs(pjId);
+  const c = notifs.filter(n => !n.read).length;
+  const b = document.getElementById('dashBadge');
+  if (b) b.textContent = c > 0 ? c : '';
+}
+
+/* === 入力欄制御 === */
+function handleKey(e, type) {
+  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); if (type === 'host') sendHostMsg(); else sendMemberMsg(); }
+}
+function autoResize(el) { el.style.height = 'auto'; el.style.height = Math.min(el.scrollHeight, 120) + 'px'; }
+
+/* === チャットUI === */
+function addMsg(cid, type, text) {
+  const c = document.getElementById(cid), d = document.createElement('div');
+  d.className = 'msg ' + type;
+  if (text === null) { d.innerHTML = '<span class="typing">考え中</span>'; d.dataset.typing = '1'; }
+  else {
+    d.textContent = text;
+    if (type === 'ai' && text.includes('━━━')) {
+      const btn = document.createElement('button');
+      btn.className = 'copy-msg-btn'; btn.textContent = '📋 この内容をコピー';
+      btn.onclick = async () => {
+        try { await navigator.clipboard.writeText(text); btn.textContent = '✅ コピーしました！'; setTimeout(() => btn.textContent = '📋 この内容をコピー', 2000); }
+        catch { prompt('コピー:', text); }
+      };
+      d.appendChild(btn);
+    }
+  }
+  c.appendChild(d); c.scrollTop = c.scrollHeight;
+}
+function rmTyping(cid) { const e = document.getElementById(cid).querySelector('[data-typing]'); if (e) e.remove(); }
+
+/* === PJ作成 === */
+async function createProject() {
+  const key = getApiKey();
+  if (!key) { alert('OpenAI API Keyを入力してください'); return; }
+  saveApiKey(key);
+  pjId = 'pj-' + Date.now().toString(36);
+
+  await dbSaveProject({ id: pjId, status: 'ヒアリング中', details: {} });
+
+  // 10スロット初期化
+  for (let i = 0; i < MAX_SLOTS; i++) {
+    await dbSaveMember({
+      id: 'm-' + Math.random().toString(36).slice(2, 8),
+      project_id: pjId, slot: i + 1,
+      name: '', status: '空席',
+      invited_at: null, expires_at: null, cancel_fee: 0, last_updated: null
+    });
+  }
+
+  hostHistory = [];
+  show('host-chat');
+  document.getElementById('hostMessages').innerHTML = '';
+  initHostChat();
+}
+
+/* === ホストチャット === */
+async function initHostChat() {
+  addMsg('hostMessages', 'ai', null);
+  try {
+    const reply = await callAI(await hostPrompt(), [{ role: 'user', content: '飲み会を企画したい' }]);
+    hostHistory = [{ role: 'user', content: '飲み会を企画したい' }, { role: 'assistant', content: reply }];
+    await dbAddChat(pjId, null, 'user', '飲み会を企画したい');
+    await dbAddChat(pjId, null, 'assistant', reply);
+    rmTyping('hostMessages');
+    addMsg('hostMessages', 'ai', reply);
+  } catch (e) { rmTyping('hostMessages'); addMsg('hostMessages', 'system', 'エラー: ' + e.message); }
+}
+
+async function sendHostMsg() {
+  if (sending) return;
+  const inp = document.getElementById('hostInput'), text = inp.value.trim();
+  if (!text) return;
+  inp.value = ''; inp.style.height = 'auto'; sending = true;
+  document.getElementById('hostSendBtn').disabled = true;
+  addMsg('hostMessages', 'user', text);
+  hostHistory.push({ role: 'user', content: text });
+  await dbAddChat(pjId, null, 'user', text);
+  addMsg('hostMessages', 'ai', null);
+  try {
+    const reply = await callAI(await hostPrompt(), hostHistory);
+    hostHistory.push({ role: 'assistant', content: reply });
+    await dbAddChat(pjId, null, 'assistant', reply);
+    rmTyping('hostMessages');
+    addMsg('hostMessages', 'ai', reply);
+    await processHostReply(reply, text);
+  } catch (e) { rmTyping('hostMessages'); addMsg('hostMessages', 'system', 'エラー: ' + e.message); }
+  sending = false;
+  document.getElementById('hostSendBtn').disabled = false;
+}
+
+async function hostPrompt() {
+  const pj = await dbGetProject(pjId) || {};
+  const members = (await dbGetMembers(pjId)).filter(m => m.name);
+  const notifs = (await dbGetNotifs(pjId)).slice(-5);
+  return `あなたは「飲み会エージェント」。幹事（ホスト）と会話し飲み会を仕切るAIです。
+
+## 会話ルール
+- フランクに自然な会話。1問1答にしない
+- 短め（2〜3文）。絵文字OK
+
+## フェーズ別の動作
+
+### フェーズ1: ヒアリング
+最初の挨拶で、以下のフォーマットを提示し「こちらを埋めて送ってください！」と案内する：
+
+━━━━━━━━━━━━━━━━
+🍻 飲み会名:
+📅 日時:
+📍 場所/店名:
+💰 予算（1人あたり）:
+👥 人数:
+📝 備考:
+━━━━━━━━━━━━━━━━
+
+ホストがフォーマットを埋めて送ってきたら、内容を確認して「✅ 要件確定」と宣言し、埋まった内容で以下のフォーマットを出力：
+
+━━━━━━━━━━━━━━━━
+🍻 {飲み会名}
+━━━━━━━━━━━━━━━━
+📅 日時: {日時}
+📍 場所: {場所}
+💰 予算: {予算}
+👥 人数: {人数}
+📝 備考: {備考}
+━━━━━━━━━━━━━━━━
+
+その後「参加者の名前を教えて（仮名・未定でもOK）。ダッシュボードに10名分の枠があるので、そこからも編集できます」と案内。
+
+### フェーズ2: 参加者登録
+名前を受け取ったら「✅ 参加者登録: {名前1}, {名前2}, ...」と宣言。
+
+### フェーズ3: 運用中
+- 変更依頼 → 確認後「✅ 変更通知: {変更内容}」
+- 中止依頼 → 確認後「✅ 中止」
+- 通知の報告を表示
+
+## 現在の状態
+ステータス: ${pj.status || '不明'}
+詳細: ${JSON.stringify(pj.details || {})}
+登録済み: ${members.map(m => m.name + '(' + m.status + ')').join(', ') || 'なし'}
+最近の通知: ${notifs.map(n => n.message).join(' / ') || 'なし'}`;
+}
+
+async function processHostReply(reply, userMsg) {
+  const pj = await dbGetProject(pjId) || {};
+
+  if (reply.includes('✅') && reply.includes('要件確定')) {
+    const d = {};
+    const m1 = reply.match(/🍻\s*(.+)/); if (m1) d.name = m1[1].trim();
+    const m2 = reply.match(/📅\s*日時[:：]\s*(.+)/); if (m2) d.date = m2[1].trim();
+    const m3 = reply.match(/📍\s*場所[:：]\s*(.+)/); if (m3) d.place = m3[1].trim();
+    const m4 = reply.match(/💰\s*予算[:：]\s*(.+)/); if (m4) d.budget = m4[1].trim();
+    const m5 = reply.match(/👥\s*人数[:：]\s*(.+)/); if (m5) d.headcount = m5[1].trim();
+    const m6 = reply.match(/📝\s*備考[:：]\s*(.+)/); if (m6) d.note = m6[1].trim();
+    await dbSaveProject({ id: pjId, status: '参加者登録中', details: d });
+  }
+
+  if (reply.includes('✅') && reply.includes('参加者登録:')) {
+    await dbSaveProject({ id: pjId, status: '運用中', details: pj.details });
+    const match = reply.match(/参加者登録[:：]\s*(.+)/);
+    if (match) {
+      const names = match[1].replace(/さん|くん|ちゃん|氏/g, '').split(/[、,\s　]+/).map(n => n.trim()).filter(n => n && n.length < 20);
+      const members = await dbGetMembers(pjId);
+      const now = new Date();
+      for (let i = 0; i < names.length && i < members.length; i++) {
+        if (!members[i].name) {
+          await dbSaveMember({
+            ...members[i], name: names[i], status: '未回答',
+            invited_at: now.toISOString(),
+            expires_at: new Date(now.getTime() + EXPIRY_H * 3600000).toISOString()
+          });
+        }
+      }
+    }
+  }
+
+  if (reply.includes('✅') && reply.includes('変更通知:')) {
+    const match = reply.match(/変更通知[:：]\s*(.+)/);
+    if (match) {
+      await broadcastToMembers('📢 変更通知: ' + match[1]);
+      await notify('change', '飲み会の詳細が変更されました: ' + match[1]);
+    }
+  }
+
+  if (reply.includes('✅') && reply.includes('中止')) {
+    await dbSaveProject({ id: pjId, status: '中止', details: pj.details });
+    await broadcastToMembers('📢 飲み会が中止になりました。');
+    await notify('cancel_event', '飲み会が中止されました');
+  }
+}
+
+async function broadcastToMembers(msg) {
+  const members = await dbGetMembers(pjId);
+  for (const m of members) {
+    if (!m.name) continue;
+    await dbAddChat(pjId, m.id, 'assistant', msg);
+  }
+}
+
+/* === ダッシュボード === */
+async function showDashboard() {
+  if (!pjId) return;
+  show('dashboard');
+  await checkExpired();
+  await renderDash();
+}
+
+async function checkExpired() {
+  const members = await dbGetMembers(pjId);
+  const now = new Date();
+  for (const m of members) {
+    if (m.status === '未回答' && m.expires_at && new Date(m.expires_at) < now) {
+      await dbSaveMember({ ...m, status: '期限切れ' });
+      await notify('expired', m.name + 'さんの招待が期限切れです');
+    }
+  }
+}
+
+async function renderDash() {
+  const pj = await dbGetProject(pjId) || {};
+  const members = await dbGetMembers(pjId);
+  const notifs = await dbGetNotifs(pjId);
+  const d = pj.details || {};
+
+  document.getElementById('dashTitle').textContent = d.name || '飲み会ダッシュボード';
+
+  const c = { '参加': 0, '不参加': 0, 'キャンセル': 0, '未回答': 0 };
+  members.forEach(m => { if (c[m.status] !== undefined) c[m.status]++; });
+  document.getElementById('dashSummary').innerHTML =
+    `<div class="stat"><div class="num" style="color:var(--green)">${c['参加']}</div><div class="label">参加</div></div>` +
+    `<div class="stat"><div class="num" style="color:var(--red)">${c['不参加'] + c['キャンセル']}</div><div class="label">不参加</div></div>` +
+    `<div class="stat"><div class="num" style="color:var(--yellow)">${c['未回答']}</div><div class="label">未回答</div></div>` +
+    `<div class="stat"><div class="num">${members.filter(m=>m.name).length}/${MAX_SLOTS}</div><div class="label">登録/枠</div></div>`;
+
+  document.getElementById('dashDetail').innerHTML =
+    (d.date ? `<dt>📅 日時</dt><dd>${esc(d.date)}</dd>` : '') +
+    (d.place ? `<dt>📍 場所</dt><dd>${esc(d.place)}</dd>` : '') +
+    (d.budget ? `<dt>💰 予算</dt><dd>${esc(d.budget)}</dd>` : '') +
+    `<dt>📊 状態</dt><dd>${pj.status || '-'}</dd>`;
+
+  renderSlots(members);
+  renderNotifs(notifs);
+  renderSettle(members, pj);
+}
+
+function renderSlots(members) {
+  const baseUrl = location.origin + location.pathname;
+  const now = new Date();
+  let html = members.map((m, i) => {
+    const url = baseUrl + '#join/' + pjId + '/' + m.id;
+    const isEmpty = !m.name;
+    const sc = m.status === '参加' ? 'yes' : m.status === '不参加' ? 'no' : m.status === 'キャンセル' ? 'cancel' : m.status === '期限切れ' ? 'expired' : m.status === '空席' ? 'vacant' : 'pending';
+    let meta = '';
+    if (!isEmpty && m.expires_at) {
+      const rem = Math.max(0, Math.floor((new Date(m.expires_at) - now) / 60000));
+      meta = m.status === '期限切れ' ? '期限切れ' : rem > 60 ? `残り${Math.floor(rem/60)}h${rem%60}m` : rem > 0 ? `残り${rem}分` : '';
+      if (m.cancel_fee > 0) meta += ` | 取消料: ¥${m.cancel_fee.toLocaleString()}`;
+    }
+    return `<div class="slot-card">
+      <span class="slot-num">${i + 1}</span>
+      ${isEmpty
+        ? `<span class="slot-name empty">未定</span><span class="status-badge vacant">空席</span>
+           <button class="small-btn" onclick="assignSlot('${m.id}')">名前を入力</button>`
+        : `<input class="slot-name-input" value="${esc(m.name)}" onchange="renameSlot('${m.id}',this.value)" />
+           <span class="status-badge ${sc}">${m.status}</span>
+           <button class="small-btn" onclick="copyUrl(this,'${url}')">URL</button>
+           ${m.status === '未回答' ? `<button class="small-btn" onclick="nudge('${m.id}')">催促</button>` : ''}
+           ${m.status === '期限切れ' ? `<button class="small-btn" onclick="reissue('${m.id}')">再発行</button>` : ''}`}
+      ${meta ? `<div class="slot-meta">${meta}</div>` : ''}
+    </div>`;
+  }).join('');
+  document.getElementById('tab-members').innerHTML = html;
+}
+
+function renderNotifs(notifs) {
+  const unread = notifs.filter(n => !n.read).length;
+  const b = document.getElementById('notifBadge');
+  if (b) b.textContent = unread > 0 ? unread : '';
+  document.getElementById('tab-notifs').innerHTML = notifs.length === 0
+    ? '<p style="color:var(--text-sub);text-align:center;padding:40px">通知はありません</p>'
+    : [...notifs].reverse().map(n =>
+      `<div class="notif-item ${n.read ? '' : 'unread'}"><span class="notif-time">${fmt(n.created_at)}</span>${esc(n.message)}</div>`
+    ).join('');
+}
+
+function renderSettle(members, pj) {
+  const joined = members.filter(m => m.status === '参加');
+  const cancelled = members.filter(m => m.status === 'キャンセル' && m.cancel_fee > 0);
+  const budget = parseInt(String(pj.details?.budget || '0').replace(/[^0-9]/g, '')) || 0;
+  const actual = parseInt(localStorage.getItem('settle-' + pjId) || '0');
+  const per = joined.length > 0 && actual > 0 ? Math.ceil(actual / joined.length) : 0;
+  document.getElementById('tab-settle').innerHTML = `
+    <div class="settlement-row"><span>参加確定</span><span>${joined.length}人</span></div>
+    <div class="settlement-row"><span>想定 (1人)</span><span>¥${budget.toLocaleString()}</span></div>
+    <div class="settlement-row"><span>見込み合計</span><span>¥${(budget * joined.length).toLocaleString()}</span></div>
+    ${cancelled.length > 0 ? `<div class="settlement-row"><span>キャンセル料</span><span style="color:var(--red)">¥${cancelled.reduce((s,m)=>s+m.cancel_fee,0).toLocaleString()}</span></div>` : ''}
+    <div class="settlement-row" style="margin-top:12px"><span>実費入力</span><input class="settlement-input" type="number" placeholder="¥" value="${actual||''}" onchange="localStorage.setItem('settle-'+pjId,this.value);renderDash()" /></div>
+    ${per > 0 ? `<div class="settlement-row settlement-total"><span>割り勘</span><span>¥${per.toLocaleString()} / 人</span></div>` : ''}
+    ${cancelled.map(m => `<div class="settlement-row"><span>${esc(m.name)} (取消)</span><span style="color:var(--red)">¥${m.cancel_fee.toLocaleString()}</span></div>`).join('')}`;
+}
+
+function switchTab(btn, id) {
+  btn.closest('.dash-body').querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  ['tab-members','tab-notifs','tab-settle'].forEach(t => document.getElementById(t).style.display = t === id ? '' : 'none');
+  if (id === 'tab-notifs') dbMarkNotifsRead(pjId).then(updateBadge);
+}
+
+async function assignSlot(mid) {
+  const name = prompt('参加者の名前（仮名OK）:');
+  if (!name?.trim()) return;
+  const members = await dbGetMembers(pjId);
+  const m = members.find(x => x.id === mid);
+  if (!m) return;
+  const now = new Date();
+  await dbSaveMember({ ...m, name: name.trim(), status: '未回答', invited_at: now.toISOString(), expires_at: new Date(now.getTime() + EXPIRY_H * 3600000).toISOString() });
+  await renderDash();
+}
+
+async function renameSlot(mid, name) {
+  const members = await dbGetMembers(pjId);
+  const m = members.find(x => x.id === mid);
+  if (m) { await dbSaveMember({ ...m, name }); }
+}
+
+async function nudge(mid) {
+  const members = await dbGetMembers(pjId);
+  const m = members.find(x => x.id === mid);
+  if (!m) return;
+  await dbAddChat(pjId, mid, 'assistant', `📢 ${m.name}さん、参加可否のご回答をお待ちしています！🙏`);
+  await notify('nudge', m.name + 'さんに催促を送信しました');
+  await renderDash();
+}
+
+async function reissue(mid) {
+  const members = await dbGetMembers(pjId);
+  const m = members.find(x => x.id === mid);
+  if (!m) return;
+  const now = new Date();
+  await dbSaveMember({ ...m, status: '未回答', invited_at: now.toISOString(), expires_at: new Date(now.getTime() + EXPIRY_H * 3600000).toISOString() });
+  await notify('reissue', m.name + 'さんの招待を再発行しました');
+  await renderDash();
+}
+
+async function copyUrl(btn, url) {
+  try { await navigator.clipboard.writeText(url); btn.textContent = '✅'; btn.classList.add('copied'); setTimeout(() => { btn.textContent = 'URL'; btn.classList.remove('copied'); }, 2000); }
+  catch { prompt('コピー:', url); }
+}
+
+/* === 参加者チャット === */
+async function startMemberChat(pid, mid) {
+  pjId = pid; memberId = mid;
+  const members = await dbGetMembers(pid);
+  const member = members.find(m => m.id === mid);
+  if (!member || !member.name) { alert('無効なURLです'); return; }
+
+  if (member.expires_at && new Date(member.expires_at) < new Date() && member.status === '未回答') {
+    await dbSaveMember({ ...member, status: '期限切れ' });
+    show('expired'); return;
+  }
+
+  const pj = await dbGetProject(pid) || {};
+  if (pj.status === '中止') {
+    show('member-chat');
+    document.getElementById('memberMessages').innerHTML = '';
+    addMsg('memberMessages', 'notification', '📢 この飲み会は中止されました。');
+    document.getElementById('memberInputArea').style.display = 'none';
+    return;
+  }
+
+  const savedKey = localStorage.getItem('nomikai-openai-key');
+  if (savedKey) document.getElementById('apiKeyInput').value = savedKey;
+
+  show('member-chat');
+  document.getElementById('memberMessages').innerHTML = '';
+  document.getElementById('memberInputArea').style.display = '';
+  document.getElementById('memberChatTitle').textContent = (pj.details?.name || '飲み会') + ' - ' + member.name;
+
+  memberHistory = await dbGetChat(pid, mid);
+  if (memberHistory.length > 0) {
+    memberHistory.forEach(m => {
+      if (m.content.startsWith('📢')) addMsg('memberMessages', 'notification', m.content);
+      else addMsg('memberMessages', m.role === 'user' ? 'user' : 'ai', m.content);
+    });
+    return;
+  }
+
+  addMsg('memberMessages', 'ai', null);
+  try {
+    const reply = await callAI(await memberPrompt(member), [{ role: 'user', content: 'こんにちは' }]);
+    memberHistory = [{ role: 'user', content: 'こんにちは' }, { role: 'assistant', content: reply }];
+    await dbAddChat(pid, mid, 'user', 'こんにちは');
+    await dbAddChat(pid, mid, 'assistant', reply);
+    rmTyping('memberMessages');
+    addMsg('memberMessages', 'ai', reply);
+  } catch (e) { rmTyping('memberMessages'); addMsg('memberMessages', 'system', 'エラー: ' + e.message); }
+}
+
+async function sendMemberMsg() {
+  if (sending) return;
+  const inp = document.getElementById('memberInput'), text = inp.value.trim();
+  if (!text) return;
+  inp.value = ''; inp.style.height = 'auto'; sending = true;
+  document.getElementById('memberSendBtn').disabled = true;
+  addMsg('memberMessages', 'user', text);
+  memberHistory.push({ role: 'user', content: text });
+  await dbAddChat(pjId, memberId, 'user', text);
+  addMsg('memberMessages', 'ai', null);
+  try {
+    const members = await dbGetMembers(pjId);
+    const member = members.find(m => m.id === memberId);
+    const reply = await callAI(await memberPrompt(member), memberHistory);
+    memberHistory.push({ role: 'assistant', content: reply });
+    await dbAddChat(pjId, memberId, 'assistant', reply);
+    rmTyping('memberMessages');
+    addMsg('memberMessages', 'ai', reply);
+    await processMemberReply(reply, text);
+  } catch (e) { rmTyping('memberMessages'); addMsg('memberMessages', 'system', 'エラー: ' + e.message); }
+  sending = false;
+  document.getElementById('memberSendBtn').disabled = false;
+}
+
+async function memberPrompt(member) {
+  const pj = await dbGetProject(pjId) || {};
+  const d = pj.details || {};
+  const budget = d.budget || '未定';
+  return `あなたは「飲み会エージェント」。幹事の代理として参加者とやりとりします。
+
+## 参加者: ${member?.name || ''} （ステータス: ${member?.status || '未回答'}）
+
+## 飲み会情報
+━━━━━━━━━━━━━━━━
+🍻 ${d.name || '飲み会'}
+📅 日時: ${d.date || '未定'}
+📍 場所: ${d.place || '未定'}
+💰 予算: ${budget}
+👥 人数: ${d.headcount || '未定'}
+📝 備考: ${d.note || 'なし'}
+━━━━━━━━━━━━━━━━
+
+## 初回の挨拶
+上記のフォーマットを使って飲み会詳細を伝え、参加可否を聞く。
+
+## 対応パターン（✅マークで記録を宣言）
+- 参加OK → 「✅ 参加OK」
+- 不参加 → 「✅ 不参加」
+- キャンセル（参加後） → 「✅ キャンセル（キャンセル料: ¥${budget}）」と宣言し、以下を案内：「キャンセル料として¥${budget}が発生します。以下の口座へお振込みをお願いします。\n\n💳 振込先: 三菱UFJ銀行 渋谷支店\n口座番号: 普通 1234567\n口座名義: ノミカイ タロウ\n金額: ¥${budget}\n期限: 飲み会当日まで」
+- アレルギー申告 → 「✅ アレルギー: {内容}」
+- 遅刻連絡 → 「✅ 遅刻: {内容}」
+- 友達追加 → 「✅ 追加参加: {内容}」
+
+## 注意
+- フレンドリーに短く。絵文字OK
+- 知らない情報を作らない
+- ✅マークは上記パターンのみ使用`;
+}
+
+async function processMemberReply(reply, userMsg) {
+  const members = await dbGetMembers(pjId);
+  const m = members.find(x => x.id === memberId);
+  if (!m || !reply.includes('✅')) return;
+  const pj = await dbGetProject(pjId) || {};
+  const budget = parseInt(String(pj.details?.budget || '0').replace(/[^0-9]/g, '')) || 0;
+
+  const updates = { ...m, last_updated: new Date().toISOString() };
+
+  if (reply.includes('✅ 参加OK') || reply.includes('✅ 参加')) {
+    if (!reply.includes('不参加') && !reply.includes('キャンセル') && !reply.includes('追加参加')) {
+      updates.status = '参加';
+      await notify('join', m.name + 'さんが参加を表明しました');
+    }
+  }
+  if (reply.includes('✅ 不参加')) {
+    updates.status = '不参加';
+    await notify('decline', m.name + 'さんが不参加を表明しました');
+  }
+  if (reply.includes('✅ キャンセル')) {
+    updates.status = 'キャンセル'; updates.cancel_fee = budget;
+    await notify('cancel', m.name + 'さんがキャンセルしました（キャンセル料: ¥' + budget.toLocaleString() + '）');
+  }
+  if (reply.includes('✅ アレルギー:')) {
+    const detail = reply.match(/✅ アレルギー[:：]\s*(.+)/)?.[1] || '';
+    await notify('allergy', m.name + 'さんがアレルギーを申告: ' + detail);
+  }
+  if (reply.includes('✅ 遅刻:')) {
+    const detail = reply.match(/✅ 遅刻[:：]\s*(.+)/)?.[1] || '';
+    await notify('late', m.name + 'さんが遅刻連絡: ' + detail);
+  }
+  if (reply.includes('✅ 追加参加:')) {
+    const detail = reply.match(/✅ 追加参加[:：]\s*(.+)/)?.[1] || '';
+    await notify('plus_one', m.name + 'さんが追加参加を申請: ' + detail);
+  }
+
+  await dbSaveMember(updates);
+}
+
+/* === ルーティング === */
+function handleRoute() {
+  const hash = location.hash.slice(1);
+  if (hash.startsWith('join/')) {
+    const p = hash.split('/');
+    if (p.length === 3) { startMemberChat(p[1], p[2]); return; }
+  }
+  const k = localStorage.getItem('nomikai-openai-key');
+  if (k) document.getElementById('apiKeyInput').value = k;
+  show('top');
+}
+window.addEventListener('hashchange', handleRoute);
+window.addEventListener('load', handleRoute);
+</script>
+</body>
+</html>
