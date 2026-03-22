@@ -159,7 +159,7 @@ input:focus { border-color: var(--accent); }
   </div>
   <div class="dash-body">
     <div class="tab-bar">
-      <button class="tab-btn active" onclick="switchTab(this,'tab-members')">参加者 (10枠)</button>
+      <button class="tab-btn active" onclick="switchTab(this,'tab-members')">参加者</button>
       <button class="tab-btn" onclick="switchTab(this,'tab-notifs')">通知<span class="badge" id="notifBadge"></span></button>
       <button class="tab-btn" onclick="switchTab(this,'tab-settle')">精算</button>
     </div>
@@ -191,7 +191,7 @@ const SUPA_URL = 'https://ypdixvgdufiwcktyzfeb.supabase.co';
 const SUPA_KEY = 'sb_publishable_MG3n2K9eG3UyekrZLMlLHw_zTSF0LpB';
 const sb = supabase.createClient(SUPA_URL, SUPA_KEY);
 
-const MAX_SLOTS = 10;
+const DEFAULT_SLOTS = 4;
 const EXPIRY_H = 24;
 let pjId = null, memberId = null;
 let hostHistory = [], memberHistory = [];
@@ -227,12 +227,14 @@ async function dbGetMembers(projectId) {
   return data || [];
 }
 async function dbSaveMember(m) {
-  await sb.from('members').upsert({
+  const data = {
     id: m.id, project_id: m.project_id, slot: m.slot,
     name: m.name, status: m.status,
     invited_at: m.invited_at, expires_at: m.expires_at,
     cancel_fee: m.cancel_fee, last_updated: m.last_updated
-  });
+  };
+  if (m.phone !== undefined) data.phone = m.phone;
+  await sb.from('members').upsert(data);
 }
 async function dbGetChat(projectId, memberId) {
   const q = sb.from('chat_messages').select('*').eq('project_id', projectId).order('created_at');
@@ -324,15 +326,7 @@ async function createProject() {
 
   await dbSaveProject({ id: pjId, status: 'ヒアリング中', details: {} });
 
-  // 10スロット初期化
-  for (let i = 0; i < MAX_SLOTS; i++) {
-    await dbSaveMember({
-      id: 'm-' + Math.random().toString(36).slice(2, 8),
-      project_id: pjId, slot: i + 1,
-      name: '', status: '空席',
-      invited_at: null, expires_at: null, cancel_fee: 0, last_updated: null
-    });
-  }
+  // スロットはヒアリング後に人数分作成するため、ここでは作らない
 
   hostHistory = [];
   show('host-chat');
@@ -412,7 +406,7 @@ async function hostPrompt() {
 📝 備考: {備考}
 ━━━━━━━━━━━━━━━━
 
-その後「参加者の名前を教えて（仮名・未定でもOK）。ダッシュボードに10名分の枠があるので、そこからも編集できます」と案内。
+その後「参加者の名前を教えて（仮名・未定でもOK）。ダッシュボードに人数分の枠を作成しました。枠の追加・削除もダッシュボードからできます」と案内。
 
 ### フェーズ2: 参加者登録
 名前を受け取ったら「✅ 参加者登録: {名前1}, {名前2}, ...」と宣言。
@@ -442,6 +436,19 @@ async function processHostReply(reply, userMsg) {
     const m6 = reply.match(/📝\s*備考[:：]\s*(.+)/); if (m6) d.note = m6[1].trim();
     await dbSaveProject({ id: pjId, status: '参加者登録中', details: d });
     if (d.name) document.getElementById('hostChatTitle').textContent = d.name;
+    // 人数分のスロットを作成
+    const slotCount = parseInt(String(d.headcount || DEFAULT_SLOTS).replace(/[^0-9]/g, '')) || DEFAULT_SLOTS;
+    const existingMembers = await dbGetMembers(pjId);
+    if (existingMembers.length === 0) {
+      for (let i = 0; i < slotCount; i++) {
+        await dbSaveMember({
+          id: 'm-' + Math.random().toString(36).slice(2, 8),
+          project_id: pjId, slot: i + 1,
+          name: '', status: '空席',
+          invited_at: null, expires_at: null, cancel_fee: 0, last_updated: null
+        });
+      }
+    }
   }
 
   if (reply.includes('✅') && reply.includes('参加者登録:')) {
@@ -513,7 +520,7 @@ async function showProjectList() {
       <div class="pj-counts">
         <span class="pj-count status-badge yes">参加 ${joined}</span>
         <span class="pj-count status-badge pending">未回答 ${pending}</span>
-        <span class="pj-count status-badge vacant">登録 ${registered}/${MAX_SLOTS}</span>
+        <span class="pj-count status-badge vacant">登録 ${registered}/${members.length}</span>
       </div>
     </div>`;
   }
@@ -581,7 +588,7 @@ async function renderDash() {
     `<div class="stat"><div class="num" style="color:var(--green)">${c['参加']}</div><div class="label">参加</div></div>` +
     `<div class="stat"><div class="num" style="color:var(--red)">${c['不参加'] + c['キャンセル']}</div><div class="label">不参加</div></div>` +
     `<div class="stat"><div class="num" style="color:var(--yellow)">${c['未回答']}</div><div class="label">未回答</div></div>` +
-    `<div class="stat"><div class="num">${members.filter(m=>m.name).length}/${MAX_SLOTS}</div><div class="label">登録/枠</div></div>`;
+    `<div class="stat"><div class="num">${members.filter(m=>m.name).length}/${members.length}</div><div class="label">登録/枠</div></div>`;
 
   document.getElementById('dashDetail').innerHTML =
     (d.date ? `<dt>📅 日時</dt><dd>${esc(d.date)}</dd>` : '') +
@@ -605,6 +612,7 @@ function renderSlots(members) {
     if (!isEmpty && m.expires_at) {
       const rem = Math.max(0, Math.floor((new Date(m.expires_at) - now) / 60000));
       meta = m.status === '期限切れ' ? '期限切れ' : rem > 60 ? `残り${Math.floor(rem/60)}h${rem%60}m` : rem > 0 ? `残り${rem}分` : '';
+      if (m.phone) meta += ` | 📞 ${m.phone}`;
       if (m.cancel_fee > 0) meta += ` | 取消料: ¥${m.cancel_fee.toLocaleString()}`;
     }
     return `<div class="slot-card">
@@ -620,7 +628,36 @@ function renderSlots(members) {
       ${meta ? `<div class="slot-meta">${meta}</div>` : ''}
     </div>`;
   }).join('');
+  html += `<div style="display:flex;gap:8px;margin-top:12px">
+    <button class="small-btn" style="flex:1;padding:10px" onclick="addSlot()">＋ 枠を追加</button>
+    ${members.length > 1 ? `<button class="small-btn danger" style="flex:1;padding:10px;color:var(--red);border-color:var(--red)" onclick="removeLastSlot()">－ 最後の枠を削除</button>` : ''}
+  </div>`;
   document.getElementById('tab-members').innerHTML = html;
+}
+
+/** 空きスロットを1つ追加する */
+async function addSlot() {
+  const members = await dbGetMembers(pjId);
+  const nextSlot = members.length + 1;
+  await dbSaveMember({
+    id: 'm-' + Math.random().toString(36).slice(2, 8),
+    project_id: pjId, slot: nextSlot,
+    name: '', status: '空席',
+    invited_at: null, expires_at: null, cancel_fee: 0, last_updated: null
+  });
+  await renderDash();
+}
+
+/** 最後の空きスロットを削除する */
+async function removeLastSlot() {
+  const members = await dbGetMembers(pjId);
+  if (members.length <= 1) return;
+  const last = members[members.length - 1];
+  if (last.name && last.status !== '空席') {
+    if (!confirm(last.name + 'さんの枠を削除しますか？')) return;
+  }
+  await sb.from('members').delete().eq('id', last.id);
+  await renderDash();
 }
 
 function renderNotifs(notifs) {
@@ -792,8 +829,12 @@ async function memberPrompt(member) {
 ## 初回の挨拶
 上記のフォーマットを使って飲み会詳細を伝え、参加可否を聞く。
 
+## 電話番号のヒアリング
+参加者が参加を表明したら、「連絡先として電話番号を教えていただけますか？」と聞く。
+電話番号を受け取ったら「✅ 電話番号: {番号}」と記録する。
+
 ## 対応パターン（✅マークで記録を宣言）
-- 参加OK → 「✅ 参加OK」
+- 参加OK → 「✅ 参加OK」→ 続けて電話番号をヒアリング
 - 不参加 → 「✅ 不参加」
 - キャンセル（参加後） → 「✅ キャンセル（キャンセル料: ¥${budget}）」と宣言し、以下を案内：「キャンセル料として¥${budget}が発生します。以下の口座へお振込みをお願いします。\n\n💳 振込先: 三菱UFJ銀行 渋谷支店\n口座番号: 普通 1234567\n口座名義: ノミカイ タロウ\n金額: ¥${budget}\n期限: 飲み会当日まで」
 - アレルギー申告 → 「✅ アレルギー: {内容}」
@@ -815,34 +856,53 @@ async function processMemberReply(reply, userMsg) {
 
   const updates = { ...m, last_updated: new Date().toISOString() };
 
+  let hostMsg = null;
+
   if (reply.includes('✅ 参加OK') || reply.includes('✅ 参加')) {
     if (!reply.includes('不参加') && !reply.includes('キャンセル') && !reply.includes('追加参加')) {
       updates.status = '参加';
-      await notify('join', m.name + 'さんが参加を表明しました');
+      hostMsg = m.name + 'さんが参加を表明しました';
+      await notify('join', hostMsg);
     }
   }
   if (reply.includes('✅ 不参加')) {
     updates.status = '不参加';
-    await notify('decline', m.name + 'さんが不参加を表明しました');
+    hostMsg = m.name + 'さんが不参加を表明しました';
+    await notify('decline', hostMsg);
   }
   if (reply.includes('✅ キャンセル')) {
     updates.status = 'キャンセル'; updates.cancel_fee = budget;
-    await notify('cancel', m.name + 'さんがキャンセルしました（キャンセル料: ¥' + budget.toLocaleString() + '）');
+    hostMsg = m.name + 'さんがキャンセルしました（キャンセル料: ¥' + budget.toLocaleString() + '）';
+    await notify('cancel', hostMsg);
   }
   if (reply.includes('✅ アレルギー:')) {
     const detail = reply.match(/✅ アレルギー[:：]\s*(.+)/)?.[1] || '';
-    await notify('allergy', m.name + 'さんがアレルギーを申告: ' + detail);
+    hostMsg = m.name + 'さんがアレルギーを申告: ' + detail;
+    await notify('allergy', hostMsg);
   }
   if (reply.includes('✅ 遅刻:')) {
     const detail = reply.match(/✅ 遅刻[:：]\s*(.+)/)?.[1] || '';
-    await notify('late', m.name + 'さんが遅刻連絡: ' + detail);
+    hostMsg = m.name + 'さんが遅刻連絡: ' + detail;
+    await notify('late', hostMsg);
   }
   if (reply.includes('✅ 追加参加:')) {
     const detail = reply.match(/✅ 追加参加[:：]\s*(.+)/)?.[1] || '';
-    await notify('plus_one', m.name + 'さんが追加参加を申請: ' + detail);
+    hostMsg = m.name + 'さんが追加参加を申請: ' + detail;
+    await notify('plus_one', hostMsg);
+  }
+
+  if (reply.includes('✅ 電話番号:')) {
+    const phone = reply.match(/✅ 電話番号[:：]\s*(.+)/)?.[1] || '';
+    updates.phone = phone.trim();
+    await notify('phone', m.name + 'さんの電話番号: ' + phone.trim());
   }
 
   await dbSaveMember(updates);
+
+  // ホストチャットにも通知メッセージを投稿
+  if (hostMsg) {
+    await dbAddChat(pjId, null, 'assistant', '📢 ' + hostMsg);
+  }
 }
 
 /* === ルーティング === */
