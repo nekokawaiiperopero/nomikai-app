@@ -92,6 +92,26 @@ input:focus { border-color: var(--accent); }
 .expired-screen h2 { color: var(--red); }
 .expired-screen p { color: var(--text-sub); }
 .loading { display: flex; justify-content: center; align-items: center; padding: 40px; color: var(--text-sub); }
+
+/* 飲み会一覧 */
+#project-list { padding: 0; }
+.pj-list-body { flex: 1; overflow-y: auto; padding: 16px; }
+.pj-card {
+  background: var(--bg-card); border-radius: var(--radius); padding: 16px;
+  margin-bottom: 12px; cursor: pointer; transition: all 0.2s;
+  border: 1px solid var(--border);
+}
+.pj-card:hover { border-color: var(--accent); transform: translateY(-1px); }
+.pj-card .pj-name { font-size: 1.1rem; font-weight: bold; margin-bottom: 8px; }
+.pj-card .pj-meta { font-size: 0.8rem; color: var(--text-sub); display: flex; gap: 12px; flex-wrap: wrap; }
+.pj-card .pj-counts { display: flex; gap: 8px; margin-top: 8px; }
+.pj-card .pj-count { font-size: 0.75rem; padding: 2px 8px; border-radius: 50px; }
+.pj-empty { color: var(--text-sub); text-align: center; padding: 60px 20px; }
+.btn-secondary {
+  background: var(--bg-card); color: var(--accent); padding: 12px 32px;
+  font-size: 1rem; border: 2px solid var(--accent); border-radius: 50px;
+}
+.btn-secondary:hover { background: var(--accent); color: #fff; }
 </style>
 </head>
 <body>
@@ -103,11 +123,12 @@ input:focus { border-color: var(--accent); }
     <input type="password" id="apiKeyInput" placeholder="sk-..." />
   </div>
   <button class="btn-primary" onclick="createProject()">新しい飲み会を作る</button>
+  <button class="btn-secondary" onclick="showProjectList()">飲み会一覧を見る</button>
 </div>
 
 <div id="host-chat" class="screen">
   <div class="header">
-    <button class="back-btn" onclick="showScreen('top')">←</button>
+    <button class="back-btn" onclick="showProjectList()">←</button>
     <h2 id="hostChatTitle">飲み会エージェント</h2>
     <button class="header-btn" onclick="showDashboard()" id="dashBtn">管理<span class="badge" id="dashBadge"></span></button>
   </div>
@@ -118,11 +139,19 @@ input:focus { border-color: var(--accent); }
   </div>
 </div>
 
+<div id="project-list" class="screen">
+  <div class="header">
+    <button class="back-btn" onclick="showScreen('top')">←</button>
+    <h2>飲み会一覧</h2>
+  </div>
+  <div class="pj-list-body" id="pjListBody"></div>
+</div>
+
 <div id="dashboard" class="screen">
   <div class="header">
-    <button class="back-btn" onclick="showScreen('host-chat')">←</button>
+    <button class="back-btn" onclick="showProjectList()">←</button>
     <h2 id="dashTitle">ダッシュボード</h2>
-    <button class="header-btn" onclick="showScreen('host-chat')">チャット</button>
+    <button class="header-btn" onclick="resumeHostChat(pjId)">チャット</button>
   </div>
   <div class="dash-header-info">
     <div class="dash-summary" id="dashSummary"></div>
@@ -185,6 +214,10 @@ function saveApiKey(k) { localStorage.setItem('nomikai-openai-key', k); }
 async function dbGetProject(id) {
   const { data } = await sb.from('projects').select('*').eq('id', id).single();
   return data;
+}
+async function dbGetAllProjects() {
+  const { data } = await sb.from('projects').select('*').order('created_at', { ascending: false });
+  return data || [];
 }
 async function dbSaveProject(pj) {
   await sb.from('projects').upsert(pj);
@@ -304,6 +337,7 @@ async function createProject() {
   hostHistory = [];
   show('host-chat');
   document.getElementById('hostMessages').innerHTML = '';
+  document.getElementById('hostChatTitle').textContent = '飲み会エージェント';
   initHostChat();
 }
 
@@ -407,6 +441,7 @@ async function processHostReply(reply, userMsg) {
     const m5 = reply.match(/👥\s*人数[:：]\s*(.+)/); if (m5) d.headcount = m5[1].trim();
     const m6 = reply.match(/📝\s*備考[:：]\s*(.+)/); if (m6) d.note = m6[1].trim();
     await dbSaveProject({ id: pjId, status: '参加者登録中', details: d });
+    if (d.name) document.getElementById('hostChatTitle').textContent = d.name;
   }
 
   if (reply.includes('✅') && reply.includes('参加者登録:')) {
@@ -449,6 +484,68 @@ async function broadcastToMembers(msg) {
     if (!m.name) continue;
     await dbAddChat(pjId, m.id, 'assistant', msg);
   }
+}
+
+/* === 飲み会一覧 === */
+async function showProjectList() {
+  show('project-list');
+  document.getElementById('pjListBody').innerHTML = '<div class="loading">読み込み中...</div>';
+  const projects = await dbGetAllProjects();
+  if (projects.length === 0) {
+    document.getElementById('pjListBody').innerHTML = '<div class="pj-empty"><p>まだ飲み会がありません</p></div>';
+    return;
+  }
+  let html = '';
+  for (const pj of projects) {
+    const d = pj.details || {};
+    const members = await dbGetMembers(pj.id);
+    const joined = members.filter(m => m.status === '参加').length;
+    const pending = members.filter(m => m.status === '未回答').length;
+    const registered = members.filter(m => m.name).length;
+    const sc = pj.status === '中止' ? 'no' : pj.status === '運用中' ? 'yes' : 'pending';
+    html += `<div class="pj-card" onclick="openProject('${pj.id}')">
+      <div class="pj-name">${esc(d.name || '(名称未定)')}</div>
+      <div class="pj-meta">
+        ${d.date ? `<span>📅 ${esc(d.date)}</span>` : ''}
+        ${d.place ? `<span>📍 ${esc(d.place)}</span>` : ''}
+        <span class="status-badge ${sc}">${pj.status}</span>
+      </div>
+      <div class="pj-counts">
+        <span class="pj-count status-badge yes">参加 ${joined}</span>
+        <span class="pj-count status-badge pending">未回答 ${pending}</span>
+        <span class="pj-count status-badge vacant">登録 ${registered}/${MAX_SLOTS}</span>
+      </div>
+    </div>`;
+  }
+  document.getElementById('pjListBody').innerHTML = html;
+}
+
+/** 一覧からPJを選択しダッシュボードを開く */
+async function openProject(id) {
+  pjId = id;
+  await showDashboard();
+}
+
+/** ホストチャットをDBから復元して表示する */
+async function resumeHostChat(id) {
+  pjId = id;
+  const savedKey = localStorage.getItem('nomikai-openai-key');
+  if (savedKey) document.getElementById('apiKeyInput').value = savedKey;
+
+  show('host-chat');
+  document.getElementById('hostMessages').innerHTML = '';
+
+  // DBからチャット履歴を復元
+  hostHistory = await dbGetChat(pjId, null);
+  if (hostHistory.length > 0) {
+    hostHistory.forEach(m => {
+      addMsg('hostMessages', m.role === 'user' ? 'user' : 'ai', m.content);
+    });
+  }
+
+  const pj = await dbGetProject(pjId);
+  document.getElementById('hostChatTitle').textContent = pj?.details?.name || '飲み会エージェント';
+  await updateBadge();
 }
 
 /* === ダッシュボード === */
